@@ -61,6 +61,9 @@ static double mutation_prob;
 static u64 num_generations;
 
 /* function declarations */
+template<typename... T>
+static void cprint(T&&...);
+
 static void clear_screen();
 static void read_input();
 static i64 chromosome_to_integer(const chromosome_t&);
@@ -79,7 +82,6 @@ static void print_selected(const generation_t&, const generation_t&);
 static void print_crossover(const generation_t&, const std::unordered_set<chromosome_t>&);
 static void print_mutations(const generation_t&, const generation_t&);
 static void menu_pause();
-static void cprint(auto&&...);
 
 /* function definitions */
 double generation_t::max_fitness() const
@@ -369,7 +371,7 @@ void print_selected(const generation_t& prev_g, const generation_t& g)
         std::unordered_set ch_after(g.chromosomes.begin(), g.chromosomes.end());
         for(std::size_t i = 0; i < population_size; ++i)
         {
-                fmt::print(ch_after.contains(prev_g.chromosomes[i]) ? GREEN : GRAY,
+                fmt::print(contains(ch_after, prev_g.chromosomes[i]) ? GREEN : GRAY,
                            "{:<3}: {}, x = {:>10.6f}, f = {:>18.16f}\n", i + 1,
                            chromosome_to_str(prev_g.chromosomes[i]), prev_g.domain_values[i],
                            prev_g.fitness_values[i]);
@@ -387,7 +389,7 @@ void print_crossover(const generation_t& prev_g,
 
         for(std::size_t i = 0; i < population_size; ++i)
         {
-                fmt::print(picked.contains(prev_g.chromosomes[i]) ? GREEN : GRAY,
+                fmt::print(contains(picked, prev_g.chromosomes[i]) ? GREEN : GRAY,
                            "{:<3}: {}, x = {:>10.6f}, f = {:>18.16f}\n", i + 1,
                            chromosome_to_str(prev_g.chromosomes[i]), prev_g.domain_values[i],
                            prev_g.fitness_values[i]);
@@ -422,11 +424,12 @@ void menu_pause()
 #endif
 }
 
-void cprint(auto&&... args)
+template<typename... T>
+void cprint(T&&... args)
 {
         if(phase == 0)
         {
-                fmt::print(std::forward<decltype(args)>(args)...);
+                fmt::print(std::forward<T>(args)...);
         }
 }
 
