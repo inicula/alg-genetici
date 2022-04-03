@@ -53,9 +53,9 @@ static double fitness(const double);
 static chromosome_t generate_random_chromosome();
 static double integer_to_domain(double);
 static generation_t generation_from_chromosomes(generation_t&&);
-static generation_t op_select(generation_t);
-static generation_t op_cross(generation_t);
-static generation_t op_mutate(generation_t);
+static generation_t op_select(generation_t&&);
+static generation_t op_cross(generation_t&&);
+static generation_t op_mutate(generation_t&&);
 
 /* function definitions */
 void read_input()
@@ -90,16 +90,12 @@ double fitness(const double x)
 
 chromosome_t generate_random_chromosome()
 {
-        static std::uniform_int_distribution<i64> dist(0, num_unique_chromosomes);
+        static std::uniform_int_distribution<i64> bit_distrib(0, 1);
 
-        chromosome_t res;
-
-        i64 x = dist(rng);
-        for(std::size_t i = 0; i < chromosome_length; ++i)
+        chromosome_t res(population_size);
+        for(std::size_t i = 0; i < population_size; ++i)
         {
-                i64 mask = 1l << i;
-
-                res.push_back(x & mask);
+                res[i] = bit_distrib(rng);
         }
 
         return res;
@@ -154,18 +150,32 @@ generation_t random_generation()
         return generation_from_chromosomes(std::move(g));
 }
 
-generation_t op_select(generation_t g)
+generation_t op_select(generation_t&& g)
 {
-        generation_t next;
-        return next;
+        static std::uniform_real_distribution<double> prob_distrib(0.0, 1.0);
+
+        std::vector<chromosome_t> chromosomes_after_selection;
+        for(std::size_t i = 0; i < population_size; ++i)
+        {
+                const double pos = prob_distrib(rng);
+
+                const auto it =
+                    std::upper_bound(g.interval_points.begin(), g.interval_points.end(), pos);
+
+                const std::size_t idx = it - g.interval_points.begin();
+                chromosomes_after_selection.push_back(g.chromosomes[idx - 1]);
+        }
+
+        g.chromosomes = std::move(chromosomes_after_selection);
+        return generation_from_chromosomes(std::move(g));
 }
 
-generation_t op_cross(generation_t g)
+generation_t op_cross(generation_t&& g)
 {
         return g;
 }
 
-generation_t op_mutate(generation_t g)
+generation_t op_mutate(generation_t&& g)
 {
         return g;
 }
