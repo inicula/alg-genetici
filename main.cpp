@@ -4,11 +4,13 @@
 #include <array>
 #include <cmath>
 #include <random>
+#include <algorithm>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 #include <fmt/color.h>
 #include "util.h"
 
+/* macros */
 #define ECHO_INPUT
 #define STDERR_COLOR fg(fmt::terminal_color::bright_red),
 
@@ -16,20 +18,33 @@
 using i64 = std::int64_t;
 using u64 = std::uint64_t;
 using chromosome_t = std::vector<bool>;
-/* using declarations */
+
+/* struct definitions */
+struct generation_t
+{
+        std::vector<chromosome_t> chromosomes;
+        std::vector<i64> integer_reps;
+        std::vector<double> domain_values;
+        std::vector<double> fitness_values;
+        std::vector<double> selection_probs;
+        std::vector<double> interval_points;
+        double fitness_sum;
+};
 
 /* global variables */
+static std::mt19937 rng(std::random_device{}());
+
+/* from input */
 static double a;
 static double b;
 static i64 num_unique_chromosomes;
 static u64 chromosome_length;
-static i64 population_size;
+static u64 population_size;
 static std::array<double, 3> coefficients;
 static i64 precision;
 static double crossover_prob;
 static double mutation_prob;
-static i64 num_generations;
-/* global variables */
+static u64 num_generations;
 
 /* function declarations */
 static void read_input();
@@ -37,7 +52,10 @@ static i64 chromosome_to_integer(const chromosome_t&);
 static double fitness(const double);
 static chromosome_t generate_random_chromosome();
 static double integer_to_domain(double);
-/* function declarations */
+static generation_t generation_from_chromosomes(std::vector<chromosome_t>&&);
+static generation_t op_select(generation_t);
+static generation_t op_cross(generation_t);
+static generation_t op_mutate(generation_t);
 
 /* function definitions */
 void read_input()
@@ -72,7 +90,6 @@ double fitness(const double x)
 
 chromosome_t generate_random_chromosome()
 {
-        static std::mt19937 rng(std::random_device{}());
         static std::uniform_int_distribution<i64> dist(0, num_unique_chromosomes);
 
         chromosome_t res;
@@ -94,7 +111,64 @@ double integer_to_domain(const double x)
 
         return (x / total) * (b - a) + a;
 }
-/* function definitions */
+
+generation_t generation_from_chromosomes(std::vector<chromosome_t>&& chromosomes)
+{
+        generation_t g;
+        g.chromosomes = std::move(chromosomes);
+
+        /* reserve memory */
+        [](auto&&... vecs)
+        {
+                (
+                    [](auto& vec)
+                    {
+                            vec.reserve(population_size);
+                    }(vecs),
+                    ...);
+        }(g.integer_reps, g.domain_values, g.fitness_values, g.selection_probs);
+
+        for(std::size_t i = 0; i < population_size; ++i)
+        {
+                g.integer_reps.push_back(chromosome_to_integer(g.chromosomes[i]));
+                g.domain_values.push_back(integer_to_domain(g.integer_reps[i]));
+                g.fitness_values.push_back(fitness(g.domain_values[i]));
+                g.fitness_sum += g.fitness_values[i];
+        }
+
+        g.interval_points.push_back(0);
+        for(std::size_t i = 0; i < population_size; ++i)
+        {
+                g.selection_probs.push_back(g.fitness_values[i] / g.fitness_sum);
+                g.interval_points.push_back(g.interval_points.back() + g.selection_probs[i]);
+        }
+
+        return g;
+}
+
+generation_t random_generation()
+{
+        std::vector<chromosome_t> chromosomes(population_size);
+        std::generate(chromosomes.begin(), chromosomes.end(), generate_random_chromosome);
+
+        return generation_from_chromosomes(std::move(chromosomes));
+}
+
+generation_t op_select(generation_t g)
+{
+        generation_t next;
+        return next;
+}
+
+generation_t op_cross(generation_t g)
+{
+        return g;
+}
+
+generation_t op_mutate(generation_t g)
+{
+        return g;
+}
 
 int main()
 {
@@ -110,9 +184,17 @@ int main()
         fmt::print(stderr, STDERR_COLOR "Number of generations: {}\n", num_generations);
 #endif
 
-        const auto t = generate_random_chromosome();
-        const auto i = chromosome_to_integer(t);
-        const auto d = integer_to_domain(i);
-        const auto f = fitness(d);
-        fmt::print("{}\n{}\n{}\n{}\n", t, i, d, f);
+        generation_t g = random_generation();
+
+        for(u64 i = 0; i < num_generations; ++i)
+        {
+                /* select */
+                g = op_select(std::move(g));
+
+                /* cross */
+                g = op_cross(std::move(g));
+
+                /* mutate */
+                g = op_mutate(std::move(g));
+        }
 }
