@@ -45,7 +45,7 @@ static FILE* fptr = std::fopen("report.txt", "w");
 static int phase = 0;
 static std::vector<std::pair<double, double>> max_avgs;
 static std::ifstream finput;
-static std::mt19937 rng(std::random_device{}());
+static std::mt19937_64 rng(std::random_device{}());
 static std::uniform_real_distribution<double> prob_distrib(0.0, 1.0);
 #include "util.h"
 
@@ -189,8 +189,14 @@ generation_t random_generation()
 
 generation_t op_selection(generation_t&& g)
 {
+        const auto best_initial_it =
+            std::max_element(g.fitness_values.begin(), g.fitness_values.end());
+        const auto best_idx = best_initial_it - g.fitness_values.begin();
+
         std::vector<chromosome_t> chromosomes_after_selection;
-        for(std::size_t i = 0; i < population_size; ++i)
+        chromosomes_after_selection.push_back(g.chromosomes[best_idx]);
+
+        for(std::size_t i = 1; i < population_size; ++i)
         {
                 const double pos = prob_distrib(rng);
 
