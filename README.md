@@ -2,9 +2,9 @@
 
 Building and running:
 ```sh
-make interactive && ./main example.in
+make interactive && ./main example.txt
 ```
 
 ```sh
-make non-interactive && ./main example.in && cat report
+make non-interactive && ./main example.txt && cat report.txt
 ```
