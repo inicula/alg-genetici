@@ -8,9 +8,11 @@
 #include <fstream>
 #include <unordered_set>
 #include <cassert>
-#include <fmt/core.h>
-#include <fmt/ranges.h>
-#include <fmt/color.h>
+
+#define FMT_HEADER_ONLY
+#include "third-party/fmt-8.1.0/include/fmt/core.h"
+#include "third-party/fmt-8.1.0/include/fmt/ranges.h"
+#include "third-party/fmt-8.1.0/include/fmt/color.h"
 
 /* macros */
 #define ECHO_INPUT
@@ -38,32 +40,10 @@ struct generation_t
         double fitness_sum;
 };
 
-struct cut_t
-{
-        std::size_t i, j;
-        chromosome_t c1;
-        chromosome_t c2;
-        std::size_t cut_point;
-        chromosome_t result1;
-        chromosome_t result2;
-};
-
-struct report_t
-{
-        void print(FILE* fptr) const;
-
-        generation_t initial_pop;
-        generation_t after_selection;
-        generation_t after_crossover;
-        std::vector<std::pair<double, double>> fitness_values;
-        std::vector<std::pair<double, std::size_t>> selections;
-        std::vector<std::pair<chromosome_t, double>> crossover_picks;
-        std::vector<cut_t> cuts;
-};
-
 /* global variables */
+static FILE* fptr = std::fopen("report.txt", "w");
 static int phase = 0;
-static report_t report;
+static std::vector<std::pair<double, double>> max_avgs;
 static std::ifstream finput;
 static std::mt19937 rng(std::random_device{}());
 static std::uniform_real_distribution<double> prob_distrib(0.0, 1.0);
@@ -96,6 +76,8 @@ static void print_normal(const generation_t&, const std::string_view, FILE*);
 static void print_selected(const generation_t&, const generation_t&);
 static void print_crossover(const generation_t&, const std::unordered_set<chromosome_t>&);
 static void print_mutations(const generation_t&, const generation_t&);
+static void cprint(auto&&...);
+static std::string chromosome_to_str(const chromosome_t&);
 
 /* function definitions */
 double generation_t::max_fitness() const
@@ -106,33 +88,6 @@ double generation_t::max_fitness() const
 double generation_t::avg_fitness() const
 {
         return fitness_sum / (double)population_size;
-}
-
-void report_t::print(FILE* fptr) const
-{
-        /* bin, x, f*/
-        print_normal(initial_pop, "Initial population:", fptr);
-
-        /* selection probs */
-        fmt::print(fptr, "Selection probabilities:\n");
-        for(std::size_t i = 0; i < population_size; ++i)
-        {
-                fmt::print(fptr, "{:<3}: p = {:>18.16f}\n", i + 1,
-                           initial_pop.selection_probs[i]);
-        }
-
-        fmt::print(fptr, "\n");
-        fmt::print(fptr, "\n");
-
-        fmt::print(fptr, "Selection intervals:\n{}\n\n", initial_pop.interval_points);
-        fmt::print(fptr, "Selections (u, idx):\n{}\n\n", fmt::join(selections, "\n"));
-
-        print_normal(after_selection, "After selection:", fptr);
-        fmt::print(fptr, "\n");
-        fmt::print(fptr, "\n");
-
-        fmt::print(fptr, "Evolution of fitness (max, avg):\n{}\n",
-                   fmt::join(fitness_values, "\n"));
 }
 
 void clear_screen()
@@ -241,10 +196,7 @@ generation_t op_selection(generation_t&& g)
                 const std::size_t idx = it - g.interval_points.begin();
                 chromosomes_after_selection.push_back(g.chromosomes[idx - 1]);
 
-                if(phase == 0)
-                {
-                        report.selections.emplace_back(pos, idx);
-                }
+                cprint(fptr, fmt::runtime("{}\n"), std::make_pair(idx, pos));
         }
 
         g.chromosomes = std::move(chromosomes_after_selection);
@@ -272,11 +224,12 @@ generation_t op_crossover(generation_t&& g,
                         new_chromosomes.push_back(g.chromosomes[i]);
                 }
 
-                if(phase == 0)
-                {
-                        report.crossover_picks.push_back({g.chromosomes[i], x});
-                }
+                cprint(fptr, fmt::runtime("{:<3}: {}, u = {:>18.16f} {}\n"), i + 1,
+                       chromosome_to_str(g.chromosomes[i]), x,
+                       x < crossover_prob ? "part of crossover" : "not part of crossover");
         }
+
+        cprint(fptr, fmt::runtime("\n"));
 
         if(idx_participants.size() % 2 == 1)
         {
@@ -295,25 +248,25 @@ generation_t op_crossover(generation_t&& g,
         const i64 len = idx_participants.size();
         for(i64 k = 0; k < len - 1; k += 2)
         {
-                cut_t crossover_cut;
-
                 const std::size_t i = idx_participants[k];
                 const std::size_t j = idx_participants[k + 1];
-
-                crossover_cut.i = i;
-                crossover_cut.j = j;
 
                 chromosome_t c1 = g.chromosomes[i];
                 chromosome_t c2 = g.chromosomes[j];
 
-                crossover_cut.c1 = c1;
-                crossover_cut.c2 = c2;
-
                 const u64 cut_point = cut_distrib(rng);
+
+                cprint(fptr, fmt::runtime("Crossover between {} and {}:\n"), i + 1, j + 1);
+                cprint(fptr, fmt::runtime("{} X {}, cut point: {}\n"), chromosome_to_str(c1),
+                       chromosome_to_str(c2), cut_point);
+
                 for(std::size_t pos = 0; pos < cut_point; ++pos)
                 {
                         std::swap(c1[pos], c2[pos]);
                 }
+
+                cprint(fptr, fmt::runtime("Results: {}, {}\n"), chromosome_to_str(c1),
+                       chromosome_to_str(c2));
 
                 new_chromosomes.push_back(std::move(c1));
                 new_chromosomes.push_back(std::move(c2));
@@ -328,13 +281,19 @@ generation_t op_mutations(generation_t&& g)
 {
         bool mutated = false;
 
-        for(auto& chromosome : g.chromosomes)
+        for(std::size_t j = 0; j < population_size; ++j)
         {
+                auto& chromosome = g.chromosomes[j];
+
                 for(std::size_t i = 0; i < chromosome_length; ++i)
                 {
                         const double pos = prob_distrib(rng);
                         if(pos < mutation_prob)
                         {
+                                cprint(fptr,
+                                       fmt::runtime("Chromosome {}, gene {} was mutated\n"),
+                                       j + 1, i + 1);
+
                                 chromosome[i] = !chromosome[i];
                                 mutated = true;
                         }
@@ -454,17 +413,36 @@ void print_mutations(const generation_t& prev_g, const generation_t& g)
 
 void menu_pause()
 {
+#ifdef INTERACTIVE
+        fmt::print(stderr, "Press RETURN to go to next step!\n");
         std::cin.get();
         std::system("clear");
+#endif
+}
+
+void cprint(auto&&... args)
+{
+        if(phase == 0)
+        {
+                fmt::print(std::forward<decltype(args)>(args)...);
+        }
 }
 
 int main(const int argc, const char* argv[])
 {
         if(argc != 2)
         {
-                fmt::print(stderr, "error: argc != 2");
+                fmt::print(
+                    stderr,
+                    "usage:\ninteractive mode: make interactive && ./main "
+                    "<input-file>\nnon-interactive "
+                    "mode: make non-interactive && ./main <input-file> && cat report.txt\n");
                 return EXIT_FAILURE;
         }
+
+#ifndef INTERACTIVE
+        std::freopen("/dev/null", "w", stdout);
+#endif
 
         finput = std::ifstream(argv[1]);
         read_input();
@@ -479,12 +457,20 @@ int main(const int argc, const char* argv[])
         fmt::print(stderr, STDERR_COLOR "Number of generations: {}\n", num_generations);
 #endif
 
-        FILE* fptr = std::fopen("report.txt", "w");
         assert(fptr != nullptr);
 
         generation_t g = random_generation();
-        report.initial_pop = g;
-        report.fitness_values.push_back({g.max_fitness(), g.avg_fitness()});
+
+        print_normal(g, "Initial population:", fptr);
+
+        fmt::print(fptr, "\nSelections probabilities:\n");
+        for(std::size_t i = 0; i < population_size; ++i)
+        {
+                fmt::print(fptr, "{:<3}: p = {:>18.16f}\n", i + 1, g.selection_probs[i]);
+        }
+        fmt::print(fptr, "\n");
+
+        fmt::print(fptr, "\nSelection intervals:\n{}\n", g.interval_points);
 
         for(u64 i = 0; i < num_generations; ++i)
         {
@@ -495,11 +481,17 @@ int main(const int argc, const char* argv[])
                 generation_t prev = g;
 
                 /* select */
+                cprint(fptr, fmt::runtime("\n"));
+                cprint(fptr,
+                       fmt::runtime("Selected elements (chromosome idx, probability)\n"));
+
                 g = op_selection(std::move(g));
                 if(phase == 0)
                 {
-                        report.after_selection = g;
+                        print_normal(g, "\nAfter selection:", fptr);
                 }
+
+                cprint(fptr, fmt::runtime("\n"));
 
                 print_selected(prev, g);
                 menu_pause();
@@ -511,7 +503,14 @@ int main(const int argc, const char* argv[])
                 /* crossover */
                 prev = g;
                 std::unordered_set<chromosome_t> picked;
+
+                cprint(fptr, fmt::runtime("Crossover probability: {}\n"), crossover_prob);
                 g = op_crossover(std::move(g), picked);
+
+                if(phase == 0)
+                {
+                        print_normal(g, "\nAfter crossover:", fptr);
+                }
 
                 print_crossover(prev, picked);
                 menu_pause();
@@ -527,10 +526,7 @@ int main(const int argc, const char* argv[])
                 print_mutations(prev, g);
                 menu_pause();
 
-                if(phase == 0)
-                {
-                        report.fitness_values.push_back({g.max_fitness(), g.avg_fitness()});
-                }
+                max_avgs.push_back(std::make_pair(g.max_fitness(), g.avg_fitness()));
 
                 ++phase;
         }
@@ -538,9 +534,9 @@ int main(const int argc, const char* argv[])
         /* print last generation */
         clear_screen();
         print_normal(g, fmt::format("P({})", num_generations));
-        menu_pause();
 
-        report.print(fptr);
+        fmt::print(fptr, "\nEvolution of (maximum fitness, average fitness):\n{}\n",
+                   fmt::join(max_avgs, "\n"));
 
         fclose(fptr);
 }
