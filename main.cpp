@@ -115,6 +115,7 @@ double integer_to_domain(const double x)
 generation_t generation_from_chromosomes(generation_t&& g)
 {
         /* clear memory from previous generation */
+        g.fitness_sum = 0;
         [](auto&&... vecs)
         {
                 (
