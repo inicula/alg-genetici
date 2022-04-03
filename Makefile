@@ -8,7 +8,7 @@ clean:
 	rm -f main
 
 interactive:
-	${CPPC} ${WFLAGS} ${CPPFLAGS} ${SRC} -DINTERACTIVE -o main
+	${CPPC} ${WFLAGS} ${CPPFLAGSINTERACTIVE} ${SRC} -DINTERACTIVE -o main
 
 non-interactive:
 	${CPPC} ${WFLAGS} ${CPPFLAGS} ${SRC} -o main

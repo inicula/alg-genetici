@@ -68,16 +68,18 @@ static double fitness(const double);
 static chromosome_t generate_random_chromosome();
 static double integer_to_domain(double);
 static generation_t generation_from_chromosomes(generation_t&&);
+static generation_t random_generation();
 static generation_t op_selection(generation_t&&);
 static generation_t op_crossover(generation_t&&, std::unordered_set<chromosome_t>&);
 static generation_t op_mutations(generation_t&&);
-static generation_t op_mutations(generation_t&&);
+static std::string chromosome_to_str(const chromosome_t&);
+static std::string chromosome_to_str_diff(const chromosome_t&, const chromosome_t&);
 static void print_normal(const generation_t&, const std::string_view, FILE*);
 static void print_selected(const generation_t&, const generation_t&);
 static void print_crossover(const generation_t&, const std::unordered_set<chromosome_t>&);
 static void print_mutations(const generation_t&, const generation_t&);
+static void menu_pause();
 static void cprint(auto&&...);
-static std::string chromosome_to_str(const chromosome_t&);
 
 /* function definitions */
 double generation_t::max_fitness() const
