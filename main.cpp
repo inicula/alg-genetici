@@ -52,7 +52,7 @@ static i64 chromosome_to_integer(const chromosome_t&);
 static double fitness(const double);
 static chromosome_t generate_random_chromosome();
 static double integer_to_domain(double);
-static generation_t generation_from_chromosomes(std::vector<chromosome_t>&&);
+static generation_t generation_from_chromosomes(generation_t&&);
 static generation_t op_select(generation_t);
 static generation_t op_cross(generation_t);
 static generation_t op_mutate(generation_t);
@@ -112,21 +112,19 @@ double integer_to_domain(const double x)
         return (x / total) * (b - a) + a;
 }
 
-generation_t generation_from_chromosomes(std::vector<chromosome_t>&& chromosomes)
+generation_t generation_from_chromosomes(generation_t&& g)
 {
-        generation_t g;
-        g.chromosomes = std::move(chromosomes);
-
-        /* reserve memory */
+        /* clear memory from previous generation */
         [](auto&&... vecs)
         {
                 (
                     [](auto& vec)
                     {
-                            vec.reserve(population_size);
+                            vec.clear();
                     }(vecs),
                     ...);
-        }(g.integer_reps, g.domain_values, g.fitness_values, g.selection_probs);
+        }(g.integer_reps, g.domain_values, g.fitness_values, g.selection_probs,
+          g.interval_points);
 
         for(std::size_t i = 0; i < population_size; ++i)
         {
@@ -148,10 +146,11 @@ generation_t generation_from_chromosomes(std::vector<chromosome_t>&& chromosomes
 
 generation_t random_generation()
 {
-        std::vector<chromosome_t> chromosomes(population_size);
-        std::generate(chromosomes.begin(), chromosomes.end(), generate_random_chromosome);
+        generation_t g;
+        g.chromosomes.resize(population_size);
+        std::generate(g.chromosomes.begin(), g.chromosomes.end(), generate_random_chromosome);
 
-        return generation_from_chromosomes(std::move(chromosomes));
+        return generation_from_chromosomes(std::move(g));
 }
 
 generation_t op_select(generation_t g)
